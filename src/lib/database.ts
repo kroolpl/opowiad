@@ -1,8 +1,17 @@
 import { createClient } from '@libsql/client'
 import bcrypt from 'bcryptjs'
 
+function getDatabaseUrl() {
+  const url = process.env.DATABASE_URL || import.meta.env.DATABASE_URL
+  // Ensure URL starts with libsql:// or file:
+  if (!url.startsWith('libsql://') && !url.startsWith('file:')) {
+    return `libsql://${url}`
+  }
+  return url
+}
+
 const client = createClient({
-  url: process.env.DATABASE_URL || import.meta.env.DATABASE_URL,
+  url: getDatabaseUrl(),
   authToken: process.env.DATABASE_AUTH_TOKEN || import.meta.env.DATABASE_AUTH_TOKEN,
 })
 
