@@ -4,7 +4,7 @@ import { db } from '../../../lib/database'
 export const POST: APIRoute = async ({ request }) => {
   try {
     const formData = await request.formData()
-    const storyId = formData.get('storyId')
+    const storyId = String(formData.get('storyId'))
 
     if (!storyId) {
       return new Response(JSON.stringify({ error: 'Story ID is required' }), { 
@@ -18,7 +18,6 @@ export const POST: APIRoute = async ({ request }) => {
       args: [storyId]
     })
 
-    // Get the current URL to build the redirect URL
     const url = new URL(request.url)
     const redirectUrl = `${url.protocol}//${url.host}/admin`
     
@@ -32,9 +31,6 @@ export const POST: APIRoute = async ({ request }) => {
     console.error('Approve error:', error)
     return new Response(JSON.stringify({
       error: 'Failed to approve story'
-    }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    }), { status: 500 })
   }
 } 
