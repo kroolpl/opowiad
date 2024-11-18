@@ -5,7 +5,12 @@ import netlify from '@astrojs/netlify/functions';
 
 // https://astro.build/config
 export default defineConfig({
-  output: 'server',
-  adapter: netlify(),
+  output: 'hybrid',
+  adapter: netlify({
+    dist: {
+      client: 'dist/client',
+      functions: 'dist/functions'
+    }
+  }),
   integrations: [tailwind()]
 });

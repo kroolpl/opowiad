@@ -1,15 +1,25 @@
 [build]
   command = "npm run build"
-  publish = "dist"
-  functions = ".netlify/functions"
+  publish = "dist/client"
+  functions = "dist/functions"
 
 [dev]
   command = "npm run dev"
   port = 3000
 
 [[redirects]]
-  from = "/*"
+  from = "/api/*"
   to = "/.netlify/functions/entry"
+  status = 200
+
+[[redirects]]
+  from = "/_astro/*"
+  to = "/_astro/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200
 
 [functions]
@@ -20,3 +30,11 @@
   for = "/_astro/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
