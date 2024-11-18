@@ -8,7 +8,10 @@ export default defineConfig({
   output: 'server',
   adapter: netlify({
     edgeMiddleware: true,
-    functionPerRoute: true
+    functionPerRoute: false,
+    dist: {
+      directory: 'dist',
+    }
   }),
   vite: {
     define: {
