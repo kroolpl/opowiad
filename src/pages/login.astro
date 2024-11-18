@@ -1,0 +1,39 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Login">
+  <main class="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+      <div>
+        <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          Sign in to your account
+        </h2>
+      </div>
+
+      <div data-netlify-identity-button class="w-full"></div>
+
+      <div class="relative">
+        <div class="absolute inset-0 flex items-center">
+          <div class="w-full border-t border-gray-300"></div>
+        </div>
+        <div class="relative flex justify-center text-sm">
+          <span class="px-2 bg-gray-50 text-gray-500">
+            Powered by Netlify Identity
+          </span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Check if user is already logged in
+    if (window.netlifyIdentity) {
+      window.netlifyIdentity.on('init', user => {
+        if (user) {
+          window.location.href = '/';
+        }
+      });
+    }
+  </script>
+</Layout> 

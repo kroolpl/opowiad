@@ -1,0 +1,385 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { Image } from 'astro:assets';
+import { db } from '../../lib/database';
+import type { Story } from '../../lib/database';
+
+// Check authentication
+if (!Astro.cookies.has('admin_token')) {
+  return Astro.redirect('/admin/login');
+}
+
+// Fetch stories with different statuses
+const [pendingResult, approvedResult, rejectedResult] = await Promise.all([
+  db.execute({
+    sql: 'SELECT * FROM stories WHERE status = "pending" ORDER BY created_at DESC',
+    args: []
+  }),
+  db.execute({
+    sql: 'SELECT * FROM stories WHERE status = "approved" ORDER BY created_at DESC LIMIT 5',
+    args: []
+  }),
+  db.execute({
+    sql: 'SELECT * FROM stories WHERE status = "rejected" ORDER BY created_at DESC LIMIT 5',
+    args: []
+  })
+]);
+
+const mapStories = (rows: any[]) => rows.map(row => ({
+  id: Number(row.id),
+  title: String(row.title),
+  content: String(row.content),
+  author: String(row.author),
+  status: String(row.status) as Story['status'],
+  created_at: String(row.created_at),
+  image_url: row.image_url ? String(row.image_url) : null
+}));
+
+const pendingStories = mapStories(pendingResult.rows);
+const approvedStories = mapStories(approvedResult.rows);
+const rejectedStories = mapStories(rejectedResult.rows);
+
+// Get counts
+const [{ count: totalCount }] = (await db.execute({
+  sql: 'SELECT COUNT(*) as count FROM stories',
+  args: []
+})).rows;
+
+const [{ count: pendingCount }] = (await db.execute({
+  sql: 'SELECT COUNT(*) as count FROM stories WHERE status = "pending"',
+  args: []
+})).rows;
+
+// Fetch all tags with story counts
+const tagResults = await db.execute(`
+  SELECT t.id, t.name, COUNT(st.story_id) as story_count
+  FROM tags t
+  LEFT JOIN story_tags st ON t.id = st.tag_id
+  GROUP BY t.id, t.name
+  ORDER BY t.name
+`);
+
+const tags = tagResults.rows.map(row => ({
+  id: Number(row.id),
+  name: String(row.name),
+  storyCount: Number(row.story_count)
+}));
+---
+
+<Layout title="Admin Dashboard">
+  <main class="min-h-screen bg-gray-50">
+    <!-- Top Navigation Bar -->
+    <nav class="bg-white shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex">
+            <div class="flex-shrink-0 flex items-center">
+              <h1 class="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+            </div>
+          </div>
+          <div class="flex items-center space-x-4">
+            <a href="/" class="text-gray-600 hover:text-gray-900">View Site</a>
+            <form action="/api/admin/logout" method="POST">
+              <button 
+                type="submit"
+                class="text-red-600 hover:text-red-900"
+              >
+                Logout
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Stats Section -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <dl class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <dt class="text-sm font-medium text-gray-500 truncate">Total Stories</dt>
+            <dd class="mt-1 text-3xl font-semibold text-gray-900">{totalCount}</dd>
+          </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <dt class="text-sm font-medium text-gray-500 truncate">Pending Review</dt>
+            <dd class="mt-1 text-3xl font-semibold text-indigo-600">{pendingCount}</dd>
+          </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <dt class="text-sm font-medium text-gray-500 truncate">Approval Rate</dt>
+            <dd class="mt-1 text-3xl font-semibold text-green-600">
+              {totalCount ? Math.round((approvedStories.length / Number(totalCount)) * 100) : 0}%
+            </dd>
+          </div>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Add Tag Management Section before the Pending Stories section -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="bg-white rounded-lg shadow-sm p-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-6">Tag Management</h2>
+        
+        <!-- Add New Tag Form -->
+        <form 
+          action="/api/admin/add-tag" 
+          method="POST"
+          class="mb-8 flex gap-4 items-end"
+        >
+          <div class="flex-1">
+            <label for="tagName" class="block text-sm font-medium text-gray-700 mb-1">
+              Add New Tag
+            </label>
+            <input
+              type="text"
+              id="tagName"
+              name="tagName"
+              required
+              placeholder="Enter tag name"
+              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Add Tag
+          </button>
+        </form>
+
+        <!-- Existing Tags Table -->
+        <div class="mt-4 overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+          <table class="min-w-full divide-y divide-gray-300">
+            <thead class="bg-gray-50">
+              <tr>
+                <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">Tag Name</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Stories</th>
+                <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                  <span class="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 bg-white">
+              {tags.map((tag) => (
+                <tr>
+                  <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900">
+                    <form 
+                      action="/api/admin/edit-tag" 
+                      method="POST"
+                      class="flex items-center gap-2"
+                    >
+                      <input type="hidden" name="tagId" value={tag.id} />
+                      <input
+                        type="text"
+                        name="tagName"
+                        value={tag.name}
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      />
+                      <button
+                        type="submit"
+                        class="text-indigo-600 hover:text-indigo-900"
+                      >
+                        Save
+                      </button>
+                    </form>
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    {tag.storyCount} {tag.storyCount === 1 ? 'story' : 'stories'}
+                  </td>
+                  <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                    <form 
+                      action="/api/admin/delete-tag" 
+                      method="POST" 
+                      class="inline"
+                      onsubmit="return confirm('Are you sure you want to delete this tag? This will remove it from all stories.')"
+                    >
+                      <input type="hidden" name="tagId" value={tag.id} />
+                      <button
+                        type="submit"
+                        class="text-red-600 hover:text-red-900"
+                      >
+                        Delete
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pending Stories Section -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <h2 class="text-xl font-bold text-gray-900 mb-6">Pending Reviews ({pendingCount})</h2>
+      {pendingStories.length === 0 ? (
+        <div class="bg-white rounded-lg shadow-sm p-6 text-center">
+          <p class="text-gray-500">No pending stories to review</p>
+        </div>
+      ) : (
+        <div class="space-y-6">
+          {pendingStories.map((story) => (
+            <article class="bg-white rounded-lg shadow-sm p-6">
+              <div class="flex justify-between items-start mb-4">
+                <div>
+                  <div class="flex items-center space-x-2">
+                    <h3 class="text-xl font-bold text-gray-900">{story.title}</h3>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                      Pending
+                    </span>
+                  </div>
+                  <p class="text-sm text-indigo-600">By {story.author}</p>
+                  <time class="text-sm text-gray-500" datetime={story.created_at}>
+                    Submitted {new Date(story.created_at).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </time>
+                </div>
+                <div class="flex space-x-3">
+                  <form action="/api/admin/approve" method="POST" class="inline">
+                    <input type="hidden" name="storyId" value={story.id} />
+                    <button 
+                      type="submit"
+                      class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                      </svg>
+                      Approve
+                    </button>
+                  </form>
+                  <form action="/api/admin/reject" method="POST" class="inline">
+                    <input type="hidden" name="storyId" value={story.id} />
+                    <button 
+                      type="submit"
+                      class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                      </svg>
+                      Reject
+                    </button>
+                  </form>
+                </div>
+              </div>
+              <div class="prose max-w-none mt-4">
+                <div class="bg-gray-50 rounded p-4">
+                  {story.content.split('\n').map((paragraph) => (
+                    <p class="text-gray-700">{paragraph}</p>
+                  ))}
+                </div>
+              </div>
+              <div class="mt-4 border-t pt-4">
+                <form 
+                  action="/api/admin/attach-image" 
+                  method="POST" 
+                  enctype="multipart/form-data"
+                  class="flex items-center space-x-4"
+                >
+                  <input type="hidden" name="storyId" value={story.id} />
+                  <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700">
+                      Attach Image
+                    </label>
+                    <input
+                      type="file"
+                      name="image"
+                      accept="image/*"
+                      class="mt-1 block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-medium
+                        file:bg-indigo-50 file:text-indigo-700
+                        hover:file:bg-indigo-100"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Upload Image
+                  </button>
+                </form>
+                {story.image_url && (
+                  <div class="mt-4">
+                    <img 
+                      src={story.image_url}
+                      alt={`Image for ${story.title}`}
+                      class="max-h-48 rounded-lg object-cover"
+                    />
+                    <form 
+                      action="/api/admin/remove-image" 
+                      method="POST" 
+                      class="mt-2"
+                    >
+                      <input type="hidden" name="storyId" value={story.id} />
+                      <button
+                        type="submit"
+                        class="text-sm text-red-600 hover:text-red-700"
+                      >
+                        Remove Image
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <!-- Recent Activity Section -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <!-- Recently Approved -->
+        <div>
+          <h2 class="text-xl font-bold text-gray-900 mb-6">Recently Approved</h2>
+          <div class="bg-white shadow-sm rounded-lg divide-y divide-gray-200">
+            {approvedStories.map((story) => (
+              <div class="p-4 hover:bg-gray-50">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-medium text-gray-900">{story.title}</h3>
+                    <p class="text-sm text-gray-500">by {story.author}</p>
+                  </div>
+                  <time class="text-xs text-gray-500">
+                    {new Date(story.created_at).toLocaleDateString()}
+                  </time>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- Recently Rejected -->
+        <div>
+          <h2 class="text-xl font-bold text-gray-900 mb-6">Recently Rejected</h2>
+          <div class="bg-white shadow-sm rounded-lg divide-y divide-gray-200">
+            {rejectedStories.map((story) => (
+              <div class="p-4 hover:bg-gray-50">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-medium text-gray-900">{story.title}</h3>
+                    <p class="text-sm text-gray-500">by {story.author}</p>
+                  </div>
+                  <time class="text-xs text-gray-500">
+                    {new Date(story.created_at).toLocaleDateString()}
+                  </time>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</Layout> 

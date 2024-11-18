@@ -1,0 +1,243 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { db } from '../lib/database';
+import type { Story } from '../lib/database';
+
+// Check for success message
+const showSuccess = Astro.url.searchParams.get('submitted') === 'true';
+
+const result = await db.execute(`
+	SELECT s.*, GROUP_CONCAT(t.name) as tags
+	FROM stories s
+	LEFT JOIN story_tags st ON s.id = st.story_id
+	LEFT JOIN tags t ON st.tag_id = t.id
+	WHERE s.status = "approved"
+	GROUP BY s.id
+	ORDER BY s.created_at DESC
+`);
+
+const stories = result.rows.map(row => ({
+	id: Number(row.id),
+	title: String(row.title),
+	content: String(row.content),
+	author: String(row.author),
+	status: String(row.status) as Story['status'],
+	created_at: String(row.created_at),
+	image_url: row.image_url ? String(row.image_url) : null,
+	tags: row.tags ? String(row.tags).split(',') : []
+}));
+
+// Get all unique tags for the filter sidebar
+const tagsResult = await db.execute(`
+	SELECT DISTINCT t.name, COUNT(st.story_id) as count
+	FROM tags t
+	JOIN story_tags st ON t.id = st.tag_id
+	JOIN stories s ON st.story_id = s.id
+	WHERE s.status = 'approved'
+	GROUP BY t.name
+	ORDER BY count DESC
+`);
+
+const allTags = tagsResult.rows.map(row => ({
+	name: String(row.name),
+	count: Number(row.count)
+}));
+---
+
+<Layout title="Short Stories">
+	<main class="min-h-screen bg-gray-50">
+		{showSuccess && (
+			<div class="fixed top-4 right-4 bg-green-100 border-l-4 border-green-500 p-4 rounded shadow-lg z-50">
+				<div class="flex">
+					<div class="flex-shrink-0">
+						<svg class="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+							<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+						</svg>
+					</div>
+					<div class="ml-3">
+						<p class="text-sm text-green-700">
+							Your story has been submitted successfully and is pending review!
+						</p>
+					</div>
+				</div>
+			</div>
+		)}
+
+		<!-- Hero Section with Background Image -->
+		<div class="relative bg-gray-900 text-white">
+			<div class="absolute inset-0 bg-gradient-to-r from-indigo-900 to-purple-900 opacity-90"></div>
+			<div class="relative max-w-7xl mx-auto px-4 py-24 sm:px-6 lg:px-8">
+				<div class="text-center">
+					<h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+						Share Your Stories
+					</h1>
+					<p class="mt-6 max-w-2xl mx-auto text-xl text-gray-300">
+						Join our community of storytellers and share your creative writing with the world.
+					</p>
+					<div class="mt-10 flex justify-center gap-4">
+						<a
+							href="/submit"
+							class="px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:py-4 md:text-lg md:px-10 transition-colors duration-200"
+						>
+							Submit Your Story
+						</a>
+						<a
+							href="#stories"
+							class="px-8 py-3 border border-white text-base font-medium rounded-md text-white hover:bg-white hover:text-gray-900 md:py-4 md:text-lg md:px-10 transition-colors duration-200"
+						>
+							Read Stories
+						</a>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Main Content -->
+		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+			<div class="lg:grid lg:grid-cols-12 lg:gap-8">
+				<!-- Sidebar -->
+				<div class="hidden lg:block lg:col-span-3">
+					<div class="sticky top-6">
+						<h2 class="text-lg font-semibold text-gray-900 mb-4">Popular Tags</h2>
+						<div class="space-y-2">
+							{allTags.map((tag) => (
+								<a
+									href={`/tag/${tag.name}`}
+									class="flex items-center justify-between group"
+								>
+									<span class="text-sm text-gray-600 group-hover:text-indigo-600">
+										{tag.name}
+									</span>
+									<span class="text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-1">
+										{tag.count}
+									</span>
+								</a>
+							))}
+						</div>
+					</div>
+				</div>
+
+				<!-- Stories Grid -->
+				<div class="mt-8 lg:mt-0 lg:col-span-9" id="stories">
+					{stories.length === 0 ? (
+						<div class="text-center py-12 bg-white rounded-lg shadow-sm">
+							<svg
+								class="mx-auto h-12 w-12 text-gray-400"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+								/>
+							</svg>
+							<h3 class="mt-2 text-sm font-medium text-gray-900">No stories yet</h3>
+							<p class="mt-1 text-sm text-gray-500">Be the first to share your story!</p>
+						</div>
+					) : (
+						<div class="grid gap-8 md:grid-cols-2">
+							{stories.map((story) => (
+								<article class="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
+									{story.image_url && (
+										<div class="aspect-w-16 aspect-h-9">
+											<img 
+												src={story.image_url}
+												alt={`Cover image for ${story.title}`}
+												class="object-cover w-full h-48"
+											/>
+										</div>
+									)}
+									<div class="p-6">
+										<div class="flex items-center justify-between mb-2">
+											<h2 class="text-xl font-bold text-gray-900 line-clamp-1">
+												{story.title}
+											</h2>
+											<time
+												class="text-xs text-gray-500"
+												datetime={story.created_at}
+											>
+												{new Date(story.created_at).toLocaleDateString('en-US', {
+													month: 'short',
+													day: 'numeric'
+												})}
+											</time>
+										</div>
+										<p class="text-sm text-indigo-600 mb-3">By {story.author}</p>
+										<div class="flex flex-wrap gap-2 mb-4">
+											{story.tags?.map((tag) => (
+												<a
+													href={`/tag/${tag}`}
+													class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 hover:bg-indigo-200 transition-colors"
+												>
+													{tag}
+												</a>
+											))}
+										</div>
+										<p class="text-gray-600 line-clamp-3 mb-4">
+											{story.content.split('\n')[0]}
+										</p>
+										<button
+											onclick="toggleStory(this)"
+											class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+										>
+											Read more
+										</button>
+										<div class="hidden mt-4 prose prose-sm max-w-none">
+											{story.content.split('\n').map((paragraph) => (
+												<p class="text-gray-700 mb-4">{paragraph}</p>
+											))}
+										</div>
+									</div>
+								</article>
+							))}
+						</div>
+					)}
+				</div>
+			</div>
+		</div>
+	</main>
+</Layout>
+
+<script>
+	function toggleStory(button) {
+		const content = button.nextElementSibling;
+		const isHidden = content.classList.contains('hidden');
+		
+		content.classList.toggle('hidden');
+		button.textContent = isHidden ? 'Show less' : 'Read more';
+	}
+</script>
+
+<style>
+	.aspect-w-16 {
+		position: relative;
+		padding-bottom: 56.25%;
+	}
+
+	.aspect-w-16 > img {
+		position: absolute;
+		height: 100%;
+		width: 100%;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+	}
+
+	.line-clamp-1 {
+		display: -webkit-box;
+		-webkit-line-clamp: 1;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.line-clamp-3 {
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+</style>

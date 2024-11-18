@@ -1,0 +1,73 @@
+---
+const user = Astro.locals.user;
+---
+
+<nav class="bg-white shadow">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between h-16">
+      <div class="flex">
+        <a href="/" class="flex-shrink-0 flex items-center">
+          <span class="text-xl font-bold">Short Stories</span>
+        </a>
+      </div>
+      
+      <div class="flex items-center space-x-6">
+        <a 
+          href="/submit" 
+          class="text-gray-500 hover:text-gray-700"
+        >
+          Submit Story
+        </a>
+
+        {user ? (
+          <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-700">
+              Welcome back!
+            </span>
+            <button
+              type="button"
+              onclick="netlifyIdentity.logout()"
+              class="text-sm text-red-600 hover:text-red-900"
+            >
+              Sign Out
+            </button>
+          </div>
+        ) : (
+          <div class="flex items-center space-x-4">
+            <button
+              type="button"
+              onclick="netlifyIdentity.open('login')"
+              class="text-sm text-indigo-600 hover:text-indigo-900"
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onclick="netlifyIdentity.open('signup')"
+              class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Register
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+</nav>
+
+<script>
+  // Handle Netlify Identity widget events
+  if (window.netlifyIdentity) {
+    window.netlifyIdentity.on('init', user => {
+      if (!user) {
+        window.netlifyIdentity.on('login', () => {
+          window.location.reload();
+        });
+      }
+    });
+
+    window.netlifyIdentity.on('logout', () => {
+      window.location.reload();
+    });
+  }
+</script> 
